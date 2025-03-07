@@ -1,32 +1,24 @@
 import React, { Component } from 'react';
-import { Spin, Alert, Input, Pagination } from 'antd';
-import debounce from 'lodash/debounce';
+import { Spin, Alert } from 'antd';
 
-import { debouncedGetMovies, rateMovie } from '../api';
+import { getRatedMovies, rateMovie } from '../api';
 
 import MovieCard from './MovieCard';
 import './MovieList.css';
 
-const { Search } = Input;
-
-class MovieList extends Component {
+class RatedMovies extends Component {
   constructor(props) {
     super(props);
     this.state = {
       movies: [],
       loading: true,
       error: null,
-      query: 'return',
-      currentPage: 1,
-      totalResults: 0,
       ratings: {},
     };
-
-    this.debouncedFetchMovies = debounce(this.fetchMovies, 500);
   }
 
   componentDidMount() {
-    this.fetchMovies();
+    this.fetchRatedMovies();
 
     const savedRatings = localStorage.getItem('movieRatings');
     if (savedRatings) {
@@ -34,51 +26,47 @@ class MovieList extends Component {
     }
   }
 
-  fetchMovies = () => {
-    const { query, currentPage } = this.state;
+  componentDidUpdate(prevProps) {
+    if (prevProps.activeTab !== this.props.activeTab && this.props.activeTab === 'rated') {
+      this.fetchRatedMovies();
+      const savedRatings = localStorage.getItem('movieRatings');
+      if (savedRatings) {
+        this.setState({ ratings: JSON.parse(savedRatings) });
+      }
+    }
+  }
+
+  fetchRatedMovies = () => {
     this.setState({ loading: true, error: null });
 
-    debouncedGetMovies(query, currentPage)
+    getRatedMovies()
       .then((data) => {
         this.setState({
           movies: data.results,
-          totalResults: data.total_results,
           loading: false,
         });
       })
       .catch((error) => {
         this.setState({
-          error: error.message || 'Failed to load movies. Please try again later.',
+          error: error.message || 'Failed to load rated movies.',
           loading: false,
           movies: [],
         });
       });
   };
 
-  handleSearch = (e) => {
-    const newQuery = e.target.value.trim();
-    this.setState({ query: newQuery, currentPage: 1 }, this.debouncedFetchMovies);
-  };
-
-  handlePageChange = (page) => {
-    this.setState({ currentPage: page }, this.fetchMovies);
-  };
-
   handleRate = (movieId, value) => {
-    // Обновляем локальное состояние
     this.setState((prevState) => {
       const updatedRatings = {
         ...prevState.ratings,
         [movieId]: value,
       };
 
-      // Сохраняем обновленные рейтинги в localStorage
       localStorage.setItem('movieRatings', JSON.stringify(updatedRatings));
 
       return { ratings: updatedRatings };
     });
 
-    // Отправляем рейтинг на сервер
     rateMovie(movieId, value)
       .then(() => {
         console.log(`Rated movie ${movieId} with value ${value}`);
@@ -89,7 +77,7 @@ class MovieList extends Component {
   };
 
   render() {
-    const { loading, error, movies, query, currentPage, totalResults } = this.state;
+    const { loading, error, movies } = this.state;
 
     if (loading) {
       return (
@@ -99,25 +87,17 @@ class MovieList extends Component {
       );
     }
 
-    return (
-      <div>
-        <div className="search-container">
-          <Search
-            placeholder="Search for movies..."
-            value={query}
-            onChange={this.handleSearch}
-            allowClear
-            size="large"
-          />
-        </div>
+    if (movies.length === 0) {
+      return <p className="no-movies">Вы еще не оценили ни одного фильма.</p>;
+    }
 
+    return (
+      <div className="movie-container">
         {error && (
           <div className="error-container">
             <Alert message="Error" description={error} type="error" showIcon />
           </div>
         )}
-
-        {movies.length === 0 && !loading && !error && <p className="no-movies">No movies found.</p>}
 
         <div className="movie-list">
           {movies.map((movie) => (
@@ -129,20 +109,9 @@ class MovieList extends Component {
             />
           ))}
         </div>
-
-        {totalResults > 20 && (
-          <Pagination
-            className="pagination"
-            current={currentPage}
-            total={totalResults}
-            pageSize={20}
-            onChange={this.handlePageChange}
-            showSizeChanger={false}
-          />
-        )}
       </div>
     );
   }
 }
 
-export default MovieList;
+export default RatedMovies;
